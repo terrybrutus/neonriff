@@ -1,0 +1,26 @@
+{
+  "overview": "A Guitar Hero-style rhythm game with 5-lane scrolling notes, neon glows, particle explosions, stage lighting, and full scoring with combos and a health bar.",
+  "features": [
+    "5-lane scrolling note highway with neon glow (green/red/yellow/blue/orange)",
+    "Keyboard (A S D F Space) and on-screen touch controls",
+    "Easy/Medium/Hard difficulty with different note density and timing windows",
+    "Perfect/Great/Good/Miss scoring with combo multipliers",
+    "Health bar that drains on misses — game over when empty",
+    "Particle explosions and flame/spark effects on note hits",
+    "Screen shake on combo milestones",
+    "Animated concert stage lighting beams",
+    "Crowd energy meter reacting to performance",
+    "Game over screen with score, accuracy, and restart button"
+  ],
+  "category": "game",
+  "tags": [
+    "rhythm-game",
+    "guitar-hero",
+    "arcade",
+    "music",
+    "neon",
+    "visual-effects",
+    "rock"
+  ],
+  "last_updated": "2026-06-04T02:30:58.700Z"
+}
