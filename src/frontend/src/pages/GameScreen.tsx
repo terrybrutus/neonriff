@@ -4,6 +4,7 @@ import { getSong } from "@/data/songs";
 import { useGameEngine } from "@/hooks/useGameEngine";
 import { useKeyboardInput } from "@/hooks/useKeyboardInput";
 import { useGameStore } from "@/store/gameStore";
+import { useEffect } from "react";
 
 export function GameScreen() {
   const selectedSongId = useGameStore((s) => s.selectedSongId);
@@ -15,25 +16,29 @@ export function GameScreen() {
   const song = getSong(selectedSongId);
   const chart = song.charts[difficulty];
 
-  const { handleLanePress } = useGameEngine(song.duration, song.bpm);
+  const { handleLanePress } = useGameEngine(
+    song.duration,
+    song.bpm,
+    song.style,
+  );
   useKeyboardInput(handleLanePress);
 
-  // Auto-end when health hits 0
-  if (health <= 0) {
-    endGame();
-  }
+  // End game when health hits 0 — must be in effect, not render
+  useEffect(() => {
+    if (health <= 0) {
+      endGame();
+    }
+  }, [health, endGame]);
 
   return (
     <div className="game-screen">
-      {/* 3D highway takes full screen */}
       <div className="highway-canvas">
         <Highway3D pressedLanes={pressedLanes} bpm={song.bpm} />
       </div>
 
-      {/* HUD overlaid on top */}
       <GameHUD />
 
-      {/* Touch controls for mobile */}
+      {/* Touch controls */}
       <div
         className="touch-controls pointer-events-auto"
         aria-label="Touch controls"
@@ -53,7 +58,6 @@ export function GameScreen() {
         ))}
       </div>
 
-      {/* Song info overlay top-right */}
       <div className="song-info-overlay">
         <div className="song-name">{song.title}</div>
         <div className="song-artist">{song.artist}</div>
@@ -62,7 +66,6 @@ export function GameScreen() {
         </div>
       </div>
 
-      {/* ESC hint */}
       <div className="esc-hint">ESC to quit</div>
     </div>
   );

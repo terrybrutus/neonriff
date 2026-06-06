@@ -1,4 +1,4 @@
-import type { Difficulty, Lane, Note, Song } from "@/types/game";
+import type { Difficulty, Lane, Note, Song, SongStyle } from "@/types/game";
 
 let _noteIdCounter = 0;
 
@@ -1175,6 +1175,7 @@ export const SONGS: Song[] = [
     artist: "The Circuit Breakers",
     bpm: 120,
     duration: 90,
+    style: "metal" as SongStyle,
     charts: {
       easy: neonFuryChart("easy"),
       medium: neonFuryChart("medium"),
@@ -1188,6 +1189,7 @@ export const SONGS: Song[] = [
     artist: "Steel Voltage",
     bpm: 100,
     duration: 85,
+    style: "blues-rock" as SongStyle,
     charts: {
       easy: chromeRebelChart("easy"),
       medium: chromeRebelChart("medium"),
@@ -1201,6 +1203,7 @@ export const SONGS: Song[] = [
     artist: "Phantom Grid",
     bpm: 140,
     duration: 80,
+    style: "electronic" as SongStyle,
     charts: {
       easy: digitalStormChart("easy"),
       medium: digitalStormChart("medium"),

@@ -1,12 +1,10 @@
-// Web Audio API synthesis engine for NeonRiff
-// All sounds are procedurally generated — no external files needed
-// Music: synthesized rock beat (kick, snare, hi-hat, bass riff)
-// SFX: hit, miss, perfect ding sounds
+export type SongStyle = "metal" | "blues-rock" | "electronic";
 
 export class AudioEngine {
   private ctx: AudioContext | null = null;
   private songStartTime = 0;
   private bpm = 120;
+  private style: SongStyle = "metal";
   private masterGain: GainNode | null = null;
   private sfxGain: GainNode | null = null;
   private musicGain: GainNode | null = null;
@@ -42,10 +40,11 @@ export class AudioEngine {
     return this.ctx.currentTime - this.songStartTime;
   }
 
-  start(bpm: number, offsetSeconds = 0) {
+  start(bpm: number, style: SongStyle = "metal", offsetSeconds = 0) {
     const ctx = this.getCtx();
     if (ctx.state === "suspended") ctx.resume();
     this.bpm = bpm;
+    this.style = style;
     this.songStartTime = ctx.currentTime - offsetSeconds;
     this._isPlaying = true;
     this.nextBeatTime = ctx.currentTime;
@@ -66,47 +65,104 @@ export class AudioEngine {
     const ctx = this.getCtx();
     const beatDur = 60 / this.bpm;
     const scheduleAhead = 0.2;
-
     while (this.nextBeatTime < ctx.currentTime + scheduleAhead) {
       this.synthesizeBeat(this.nextBeatTime, this.beatIndex);
-      this.beatIndex = (this.beatIndex + 1) % 16; // 16th note grid
-      this.nextBeatTime += beatDur / 4; // 16th note subdivision
+      this.beatIndex = (this.beatIndex + 1) % 16;
+      this.nextBeatTime += beatDur / 4;
     }
   }
 
-  // 16th note beat pattern (indices 0-15 in a 4/4 measure)
   private synthesizeBeat(when: number, step: number) {
+    if (this.style === "electronic") {
+      this.beatElectronic(when, step);
+    } else if (this.style === "blues-rock") {
+      this.beatBlues(when, step);
+    } else {
+      this.beatMetal(when, step);
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // METAL — double kick, all 16th hi-hats, heavy chords, aggressive bass
+  // -----------------------------------------------------------------------
+  private beatMetal(when: number, step: number) {
     const ctx = this.getCtx();
     const out = this.musicGain!;
 
-    // KICK on steps 0, 8 (beats 1 and 3)
-    if (step === 0 || step === 8) {
+    if (step === 0 || step === 2 || step === 8 || step === 10) {
       this.synthKick(ctx, when, out);
     }
-    // SNARE on steps 4, 12 (beats 2 and 4)
     if (step === 4 || step === 12) {
       this.synthSnare(ctx, when, out);
     }
-    // HI-HAT on every even step
-    if (step % 2 === 0) {
-      this.synthHihat(ctx, when, out, step % 8 === 0);
-    }
-    // BASS GUITAR riff — follows a power chord pattern
-    const bassPattern = [
-      0, -1, -1, -1, 5, -1, -1, -1, 3, -1, -1, -1, 7, -1, -1, -1,
-    ];
-    const bassNote = bassPattern[step];
-    if (bassNote >= 0) {
-      this.synthBass(ctx, when, 55 * 2 ** (bassNote / 12), out);
-    }
-    // GUITAR POWER CHORD — on beats 1, 2, 3, 4 (steps 0, 4, 8, 12)
+    this.synthHihat(ctx, when, out, false);
+
+    const bassPat = [0, -1, 7, -1, 5, -1, 3, -1, 0, -1, 7, -1, 10, -1, 7, -1];
+    const bn = bassPat[step];
+    if (bn >= 0) this.synthBass(ctx, when, 55 * 2 ** (bn / 12), out);
+
     if (step % 4 === 0) {
-      const chordPattern = [0, 5, 3, 7];
-      const chordNote = chordPattern[(step / 4) % 4];
-      this.synthGuitar(ctx, when, 110 * 2 ** (chordNote / 12), out);
+      const chords = [0, 7, 5, 10];
+      this.synthGuitar(
+        ctx,
+        when,
+        110 * 2 ** (chords[(step / 4) % 4] / 12),
+        out,
+      );
     }
   }
 
+  // -----------------------------------------------------------------------
+  // BLUES-ROCK — shuffle groove, sparse hi-hat, pentatonic bass walk, E guitar
+  // -----------------------------------------------------------------------
+  private beatBlues(when: number, step: number) {
+    const ctx = this.getCtx();
+    const out = this.musicGain!;
+
+    if (step === 0 || step === 8) this.synthKick(ctx, when, out);
+    if (step === 4 || step === 12) this.synthSnare(ctx, when, out);
+
+    // Open hi-hat on quarter notes, closed on 8ths
+    if (step % 4 === 0) {
+      this.synthHihat(ctx, when, out, true);
+    } else if (step % 2 === 0) {
+      this.synthHihat(ctx, when, out, false);
+    }
+
+    // Pentatonic bass walk in E (E2 = 41.2 Hz)
+    const bassPat = [0, -1, -1, 4, 5, -1, -1, 7, 5, -1, -1, 4, 0, -1, -1, -1];
+    const bn = bassPat[step];
+    if (bn >= 0) this.synthBass(ctx, when, 41.2 * 2 ** (bn / 12), out);
+
+    // Sparse guitar stabs on beats 1 and 3 — lower E power chord
+    if (step === 0) this.synthGuitar(ctx, when, 82.4, out);
+    if (step === 8) this.synthGuitar(ctx, when, 82.4 * 2 ** (5 / 12), out);
+  }
+
+  // -----------------------------------------------------------------------
+  // ELECTRONIC — 4-on-floor, digital clap, synth bass, arpeggio lead
+  // -----------------------------------------------------------------------
+  private beatElectronic(when: number, step: number) {
+    const ctx = this.getCtx();
+    const out = this.musicGain!;
+
+    if (step % 4 === 0) this.synthKick(ctx, when, out);
+    if (step === 4 || step === 12) this.synthClap(ctx, when, out);
+    this.synthDigiHihat(ctx, when, out);
+
+    // Staccato synth bass (square wave, upper register)
+    const bassPat = [0, 12, 7, -1, 5, -1, 7, -1, 0, 12, 5, -1, 10, -1, 7, 5];
+    const bn = bassPat[step];
+    if (bn >= 0) this.synthSynthBass(ctx, when, 110 * 2 ** (bn / 12), out);
+
+    // Synth arpeggio lead — A3 base (220 Hz)
+    const arpPat = [0, 4, 7, 12, 0, 7, 12, 16, 3, 7, 10, 15, 0, 4, 7, 12];
+    this.synthArp(ctx, when, 220 * 2 ** (arpPat[step] / 12), out);
+  }
+
+  // -----------------------------------------------------------------------
+  // Drum / synth primitives
+  // -----------------------------------------------------------------------
   private synthKick(ctx: AudioContext, when: number, out: AudioNode) {
     const osc = ctx.createOscillator();
     const env = ctx.createGain();
@@ -122,12 +178,10 @@ export class AudioEngine {
   }
 
   private synthSnare(ctx: AudioContext, when: number, out: AudioNode) {
-    // Noise burst
     const bufSize = ctx.sampleRate * 0.18;
     const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
     const data = buf.getChannelData(0);
     for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
-
     const src = ctx.createBufferSource();
     src.buffer = buf;
     const bpf = ctx.createBiquadFilter();
@@ -143,7 +197,6 @@ export class AudioEngine {
     src.start(when);
     src.stop(when + 0.2);
 
-    // Tone component
     const osc = ctx.createOscillator();
     const oenv = ctx.createGain();
     osc.connect(oenv);
@@ -165,7 +218,6 @@ export class AudioEngine {
     const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
     const data = buf.getChannelData(0);
     for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
-
     const src = ctx.createBufferSource();
     src.buffer = buf;
     const hpf = ctx.createBiquadFilter();
@@ -179,6 +231,44 @@ export class AudioEngine {
     env.gain.exponentialRampToValueAtTime(0.001, when + (open ? 0.2 : 0.04));
     src.start(when);
     src.stop(when + (open ? 0.25 : 0.05));
+  }
+
+  private synthClap(ctx: AudioContext, when: number, out: AudioNode) {
+    const bufSize = ctx.sampleRate * 0.06;
+    const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const hpf = ctx.createBiquadFilter();
+    hpf.type = "highpass";
+    hpf.frequency.value = 2200;
+    hpf.Q.value = 0.5;
+    const env = ctx.createGain();
+    src.connect(hpf);
+    hpf.connect(env);
+    env.connect(out);
+    env.gain.setValueAtTime(0.75, when);
+    env.gain.exponentialRampToValueAtTime(0.001, when + 0.09);
+    src.start(when);
+    src.stop(when + 0.12);
+  }
+
+  private synthDigiHihat(ctx: AudioContext, when: number, out: AudioNode) {
+    const osc = ctx.createOscillator();
+    const env = ctx.createGain();
+    const hpf = ctx.createBiquadFilter();
+    osc.connect(hpf);
+    hpf.connect(env);
+    env.connect(out);
+    osc.type = "square";
+    osc.frequency.value = 6000 + Math.random() * 2000;
+    hpf.type = "highpass";
+    hpf.frequency.value = 5000;
+    env.gain.setValueAtTime(0.08, when);
+    env.gain.exponentialRampToValueAtTime(0.001, when + 0.025);
+    osc.start(when);
+    osc.stop(when + 0.03);
   }
 
   private synthBass(
@@ -216,13 +306,55 @@ export class AudioEngine {
     osc.stop(when + dur + 0.05);
   }
 
+  private synthSynthBass(
+    ctx: AudioContext,
+    when: number,
+    freq: number,
+    out: AudioNode,
+  ) {
+    const osc = ctx.createOscillator();
+    const env = ctx.createGain();
+    const lpf = ctx.createBiquadFilter();
+    osc.connect(lpf);
+    lpf.connect(env);
+    env.connect(out);
+    osc.type = "square";
+    osc.frequency.value = freq;
+    lpf.type = "lowpass";
+    lpf.frequency.value = 1400;
+    lpf.Q.value = 2;
+    const dur = (60 / this.bpm) * 0.22;
+    env.gain.setValueAtTime(0.45, when);
+    env.gain.exponentialRampToValueAtTime(0.001, when + dur);
+    osc.start(when);
+    osc.stop(when + dur + 0.02);
+  }
+
+  private synthArp(
+    ctx: AudioContext,
+    when: number,
+    freq: number,
+    out: AudioNode,
+  ) {
+    const osc = ctx.createOscillator();
+    const env = ctx.createGain();
+    osc.connect(env);
+    env.connect(out);
+    osc.type = "sine";
+    osc.frequency.value = freq;
+    const dur = (60 / this.bpm) * 0.18;
+    env.gain.setValueAtTime(0.2, when);
+    env.gain.exponentialRampToValueAtTime(0.001, when + dur);
+    osc.start(when);
+    osc.stop(when + dur + 0.01);
+  }
+
   private synthGuitar(
     ctx: AudioContext,
     when: number,
     freq: number,
     out: AudioNode,
   ) {
-    // Power chord = root + fifth + octave
     const freqs = [freq, freq * 1.5, freq * 2];
     for (const f of freqs) {
       const osc = ctx.createOscillator();
@@ -255,23 +387,22 @@ export class AudioEngine {
     }
   }
 
-  // ---- SFX ----
-
+  // -----------------------------------------------------------------------
+  // SFX
+  // -----------------------------------------------------------------------
   playHit(lane: number, rating: "perfect" | "great" | "good") {
     const ctx = this.getCtx();
     if (ctx.state === "suspended") ctx.resume();
     const out = this.sfxGain!;
     const when = ctx.currentTime;
 
-    // Different tones per lane
-    const laneFreqs = [523.25, 659.25, 783.99, 987.77, 1174.66]; // C5, E5, G5, B5, D6
+    const laneFreqs = [523.25, 659.25, 783.99, 987.77, 1174.66];
     const freq = laneFreqs[lane] ?? 660;
 
     const osc = ctx.createOscillator();
     const env = ctx.createGain();
     osc.connect(env);
     env.connect(out);
-
     osc.type = "triangle";
     osc.frequency.value =
       freq * (rating === "perfect" ? 1 : rating === "great" ? 0.95 : 0.9);
@@ -283,7 +414,6 @@ export class AudioEngine {
     osc.stop(when + dur + 0.02);
 
     if (rating === "perfect") {
-      // Add sparkle overtone
       const osc2 = ctx.createOscillator();
       const env2 = ctx.createGain();
       osc2.connect(env2);
@@ -307,7 +437,6 @@ export class AudioEngine {
     const env = ctx.createGain();
     osc.connect(env);
     env.connect(out);
-
     osc.type = "sawtooth";
     osc.frequency.setValueAtTime(180, when);
     osc.frequency.exponentialRampToValueAtTime(60, when + 0.18);
