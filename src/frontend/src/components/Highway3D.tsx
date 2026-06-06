@@ -646,7 +646,7 @@ export function Highway3D({ pressedLanes, bpm }: Highway3DProps) {
       dpr={Math.min(window.devicePixelRatio, 2)}
     >
       {/* Atmosphere */}
-      <fog attach="fog" color="#000012" near={25} far={65} />
+      <fog attach="fog" args={["#000012", 25, 65]} />
       <color attach="background" args={["#000008"]} />
 
       {/* Lighting */}
