@@ -1,39 +1,36 @@
-import { GameHUD } from "@/components/GameHUD";
-import { GameHighway } from "@/components/GameHighway";
-import { LaneGlowEffects } from "@/components/LaneGlowEffects";
-import { ParticleSystem } from "@/components/ParticleSystem";
-import { StageLighting } from "@/components/StageLighting";
-import { useGameEngine } from "@/hooks/useGameEngine";
-import { useKeyboardInput } from "@/hooks/useKeyboardInput";
 import { GameOverScreen } from "@/pages/GameOverScreen";
+import { GameScreen } from "@/pages/GameScreen";
 import { StartScreen } from "@/pages/StartScreen";
 import { useGameStore } from "@/store/gameStore";
-import TouchControls from "./components/TouchControls";
+import { useEffect } from "react";
 
 export default function App() {
-  const gameState = useGameStore((s) => s.gameState);
-  const screenShake = useGameStore((s) => s.screenShake);
+  const screen = useGameStore((s) => s.screen);
+  const returnToStart = useGameStore((s) => s.returnToStart);
 
-  const { attemptHit } = useGameEngine();
-  useKeyboardInput(attemptHit);
+  // ESC key to return to menu from game
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && screen === "game") {
+        returnToStart();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [screen, returnToStart]);
 
   return (
     <div
-      className={`relative w-screen h-screen bg-black overflow-hidden ${screenShake.active ? "animate-screen-shake" : ""}`}
-      data-ocid="game.container"
+      style={{
+        width: "100vw",
+        height: "100vh",
+        overflow: "hidden",
+        background: "#000008",
+      }}
     >
-      {gameState === "idle" && <StartScreen />}
-      {gameState === "playing" && (
-        <>
-          <StageLighting />
-          <GameHighway />
-          <LaneGlowEffects />
-          <ParticleSystem />
-          <GameHUD />
-          <TouchControls />
-        </>
-      )}
-      {gameState === "gameover" && <GameOverScreen />}
+      {screen === "start" && <StartScreen />}
+      {screen === "game" && <GameScreen />}
+      {screen === "gameover" && <GameOverScreen />}
     </div>
   );
 }

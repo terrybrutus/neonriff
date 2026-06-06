@@ -1,193 +1,194 @@
-import { useGameStore } from "@/store/gameStore";
+import { useGameStatus } from "@/store/gameStore";
+import { LANE_COLORS } from "@/types/game";
 import { useEffect, useRef, useState } from "react";
 
-const LANE_COLORS = ["#00ff41", "#ff0033", "#ffee00", "#00aaff", "#ff6600"];
-
-const RESULT_COLORS: Record<string, string> = {
-  Perfect: "#00ffff",
-  Great: "#ffee00",
-  Good: "#ffffff",
-  Miss: "#ff0033",
+const RATING_COLORS = {
+  perfect: "#ffffff",
+  great: "#00ff88",
+  good: "#ffcc00",
+  miss: "#ff2244",
 };
 
-function formatScore(n: number): string {
-  return n.toLocaleString();
-}
-
-function getComboTierColor(combo: number): string {
-  if (combo >= 50) return LANE_COLORS[4]; // orange
-  if (combo >= 40) return LANE_COLORS[3]; // blue
-  if (combo >= 30) return LANE_COLORS[2]; // yellow
-  if (combo >= 20) return LANE_COLORS[1]; // red
-  return LANE_COLORS[0]; // green
-}
-
-function getMultiplier(combo: number): string {
-  const mult = Math.min(2.0, 1.0 + Math.floor(combo / 10) * 0.1);
-  return `x${mult.toFixed(1)}`;
-}
+const RATING_LABELS = {
+  perfect: "PERFECT",
+  great: "GREAT",
+  good: "GOOD",
+  miss: "MISS",
+};
 
 export function GameHUD() {
-  const score = useGameStore((s) => s.score);
-  const combo = useGameStore((s) => s.combo);
-  const health = useGameStore((s) => s.health);
-  const crowdEnergy = useGameStore((s) => s.crowdEnergy);
-  const accuracy = useGameStore((s) => s.accuracy);
-  const gameState = useGameStore((s) => s.gameState);
-
-  const [hitFeedback, setHitFeedback] = useState<{
-    result: string;
-    id: number;
-  } | null>(null);
-  const prevAccuracyRef = useRef(accuracy);
+  const { score, combo, maxCombo, health, lastRating, accuracy } =
+    useGameStatus();
+  const [showRating, setShowRating] = useState(false);
+  const [ratingOpacity, setRatingOpacity] = useState(1);
+  const ratingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fadeTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const opacityRef = useRef(1);
 
   useEffect(() => {
-    const prev = prevAccuracyRef.current;
-    let result: string | null = null;
-    if (accuracy.perfect > prev.perfect) result = "Perfect";
-    else if (accuracy.great > prev.great) result = "Great";
-    else if (accuracy.good > prev.good) result = "Good";
-    else if (accuracy.miss > prev.miss) result = "Miss";
+    if (!lastRating) return;
+    if (ratingTimer.current) clearTimeout(ratingTimer.current);
+    if (fadeTimer.current) clearInterval(fadeTimer.current);
+    opacityRef.current = 1;
+    setRatingOpacity(1);
+    setShowRating(true);
 
-    if (result) {
-      setHitFeedback({ result, id: Date.now() });
-      const t = setTimeout(() => setHitFeedback(null), 500);
-      return () => clearTimeout(t);
-    }
-    prevAccuracyRef.current = accuracy;
-  }, [accuracy]);
+    ratingTimer.current = setTimeout(() => {
+      // Fade out
+      fadeTimer.current = setInterval(() => {
+        opacityRef.current -= 0.08;
+        setRatingOpacity(opacityRef.current);
+        if (opacityRef.current <= 0) {
+          clearInterval(fadeTimer.current!);
+          setShowRating(false);
+        }
+      }, 30);
+    }, 350);
 
-  if (gameState !== "playing" && gameState !== "paused") return null;
+    return () => {
+      if (ratingTimer.current) clearTimeout(ratingTimer.current);
+      if (fadeTimer.current) clearInterval(fadeTimer.current);
+    };
+  }, [lastRating]);
 
-  const comboColor = getComboTierColor(combo);
-  const multiplier = getMultiplier(combo);
-  const crowdWild = crowdEnergy >= 80;
+  const totalNotes =
+    accuracy.perfect + accuracy.great + accuracy.good + accuracy.miss;
+  const pctAccuracy =
+    totalNotes === 0
+      ? 100
+      : Math.round(
+          ((accuracy.perfect + accuracy.great * 0.8 + accuracy.good * 0.5) /
+            totalNotes) *
+            100,
+        );
+
+  const multiplier = combo >= 30 ? 4 : combo >= 20 ? 3 : combo >= 10 ? 2 : 1;
 
   return (
-    <div
-      className="absolute inset-0 pointer-events-none"
-      data-ocid="game.hud.panel"
-    >
+    <div className="absolute inset-0 pointer-events-none select-none overflow-hidden">
       {/* Top bar */}
-      <div className="absolute top-0 left-0 right-0 flex items-start justify-between px-6 pt-4">
-        {/* Combo left */}
-        <div className="flex flex-col items-start">
+      <div className="absolute top-0 left-0 right-0 flex justify-between items-start p-4">
+        {/* Score */}
+        <div className="text-left">
+          <div className="hud-label">SCORE</div>
+          <div className="hud-value">{score.toLocaleString()}</div>
+        </div>
+
+        {/* Accuracy */}
+        <div className="text-center">
+          <div className="hud-label">ACCURACY</div>
+          <div className="hud-value text-2xl">{pctAccuracy}%</div>
+        </div>
+
+        {/* Max combo */}
+        <div className="text-right">
+          <div className="hud-label">BEST COMBO</div>
+          <div className="hud-value">{maxCombo}x</div>
+        </div>
+      </div>
+
+      {/* Combo display — center */}
+      {combo >= 4 && (
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 text-center">
           <div
-            className="text-4xl font-black tracking-tighter"
+            className="hud-combo"
             style={{
-              color: comboColor,
-              textShadow: `0 0 12px ${comboColor}, 0 0 24px ${comboColor}`,
+              color:
+                combo >= 30
+                  ? "#ff6d00"
+                  : combo >= 20
+                    ? "#ffea00"
+                    : combo >= 10
+                      ? "#00b0ff"
+                      : "#00ff41",
+              textShadow: "0 0 20px currentColor, 0 0 40px currentColor",
             }}
-            data-ocid="game.hud.combo"
           >
-            {combo > 0 ? `x${combo} COMBO` : ""}
+            {combo}
           </div>
-          {combo > 0 && (
-            <div
-              className="text-sm font-bold mt-1"
-              style={{
-                color: comboColor,
-                textShadow: `0 0 8px ${comboColor}`,
-              }}
-              data-ocid="game.hud.multiplier"
-            >
-              {multiplier}
+          <div className="hud-label tracking-[0.3em]">COMBO</div>
+          {multiplier > 1 && (
+            <div className="hud-multiplier" style={{ color: "#ff6d00" }}>
+              {multiplier}x
             </div>
           )}
         </div>
+      )}
 
-        {/* Score center */}
+      {/* Hit rating popup */}
+      {showRating && lastRating && (
         <div
-          className="text-5xl font-black tracking-tight"
+          className="absolute left-1/2 -translate-x-1/2 text-center"
           style={{
-            color: "#ffffff",
-            textShadow:
-              "0 0 12px rgba(255,255,255,0.9), 0 0 24px rgba(255,255,255,0.5)",
+            top: "58%",
+            opacity: ratingOpacity,
+            color: RATING_COLORS[lastRating],
+            textShadow: `0 0 16px ${RATING_COLORS[lastRating]}, 0 0 32px ${RATING_COLORS[lastRating]}`,
+            fontSize: "2rem",
+            fontFamily: "Orbitron, monospace",
+            fontWeight: 700,
+            letterSpacing: "0.15em",
+            transform: `translateX(-50%) scale(${0.9 + ratingOpacity * 0.1})`,
+            transition: "transform 0.1s",
           }}
-          data-ocid="game.hud.score"
         >
-          {formatScore(score)}
-        </div>
-
-        {/* Spacer right */}
-        <div className="w-32" />
-      </div>
-
-      {/* Hit feedback */}
-      {hitFeedback && (
-        <div
-          key={hitFeedback.id}
-          className="absolute left-1/2 top-[70%] -translate-x-1/2 -translate-y-1/2 text-5xl font-black animate-fade-out"
-          style={{
-            color: RESULT_COLORS[hitFeedback.result],
-            textShadow: `0 0 16px ${RESULT_COLORS[hitFeedback.result]}, 0 0 32px ${RESULT_COLORS[hitFeedback.result]}`,
-          }}
-          data-ocid="game.hud.hit_feedback"
-        >
-          {hitFeedback.result}
+          {RATING_LABELS[lastRating]}
         </div>
       )}
 
-      {/* Bottom left: Health */}
-      <div
-        className="absolute bottom-6 left-6 flex flex-col gap-1"
-        data-ocid="game.hud.health.panel"
-      >
-        <div className="text-xs font-bold tracking-widest text-white/70">
-          HEALTH
-        </div>
-        <div className="w-52 h-4 bg-white/10 rounded-full overflow-hidden border border-white/10">
+      {/* Health bar — bottom center */}
+      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-64">
+        <div className="hud-label text-center mb-1">HEALTH</div>
+        <div className="health-bar-bg">
           <div
-            className="h-full rounded-full transition-all duration-200"
+            className="health-bar-fill"
             style={{
               width: `${health}%`,
-              backgroundColor:
-                health > 50 ? "#00ff41" : health > 25 ? "#ffee00" : "#ff0033",
+              background:
+                health > 60
+                  ? "linear-gradient(90deg, #00cc44, #00ff66)"
+                  : health > 30
+                    ? "linear-gradient(90deg, #cc8800, #ffaa00)"
+                    : "linear-gradient(90deg, #cc0022, #ff2244)",
               boxShadow:
-                health > 50
-                  ? "0 0 10px #00ff41, 0 0 20px #00ff41"
-                  : health > 25
-                    ? "0 0 10px #ffee00, 0 0 20px #ffee00"
-                    : "0 0 10px #ff0033, 0 0 20px #ff0033",
+                health > 60
+                  ? "0 0 12px #00ff66"
+                  : health > 30
+                    ? "0 0 12px #ffaa00"
+                    : "0 0 12px #ff2244",
             }}
-            data-ocid="game.hud.health.bar"
           />
         </div>
-      </div>
-
-      {/* Bottom right: Crowd Energy */}
-      <div
-        className="absolute bottom-6 right-6 flex flex-col items-end gap-1"
-        data-ocid="game.hud.crowd.panel"
-      >
-        <div className="text-xs font-bold tracking-widest text-white/70">
-          CROWD ENERGY
-        </div>
-        <div className="w-52 h-4 bg-white/10 rounded-full overflow-hidden border border-white/10">
-          <div
-            className={`h-full rounded-full transition-all duration-200 ${crowdWild ? "animate-pulse-crowd" : ""}`}
-            style={{
-              width: `${crowdEnergy}%`,
-              backgroundColor: crowdWild ? "#ff00ff" : "#00aaff",
-              boxShadow: crowdWild
-                ? "0 0 12px #ff00ff, 0 0 24px #ff00ff"
-                : "0 0 8px #00aaff, 0 0 16px #00aaff",
-            }}
-            data-ocid="game.hud.crowd.bar"
-          />
-        </div>
-        {crowdWild && (
-          <div
-            className="text-sm font-black tracking-wider animate-glow-pulse"
-            style={{
-              color: "#ff00ff",
-              textShadow: "0 0 10px #ff00ff, 0 0 20px #ff00ff",
-            }}
-            data-ocid="game.hud.crowd.wild_text"
-          >
-            CROWD GOING WILD!
+        {health <= 0 && (
+          <div className="text-center mt-2 text-red-400 font-bold tracking-widest animate-pulse">
+            GAME OVER
           </div>
         )}
+      </div>
+
+      {/* Lane key hints — bottom row */}
+      <div className="absolute bottom-16 left-1/2 -translate-x-1/2 flex gap-2">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <div
+            key={i}
+            className="lane-key"
+            style={{
+              borderColor: LANE_COLORS[i as 0],
+              color: LANE_COLORS[i as 0],
+              boxShadow: `0 0 8px ${LANE_COLORS[i as 0]}44`,
+            }}
+          >
+            {i === 4 ? "SPC" : ["A", "S", "D", "F"][i]}
+          </div>
+        ))}
+      </div>
+
+      {/* Note accuracy breakdown — top-left tiny */}
+      <div className="absolute top-20 left-4 text-xs font-mono opacity-60">
+        <div style={{ color: "#ffffff" }}>P {accuracy.perfect}</div>
+        <div style={{ color: "#00ff88" }}>G {accuracy.great}</div>
+        <div style={{ color: "#ffcc00" }}>O {accuracy.good}</div>
+        <div style={{ color: "#ff2244" }}>M {accuracy.miss}</div>
       </div>
     </div>
   );
