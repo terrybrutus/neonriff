@@ -4,7 +4,7 @@ import type { Lane, Note } from "@/types/game";
 import { HIT_WINDOWS } from "@/types/game";
 import { useCallback, useEffect, useRef } from "react";
 
-const MISS_CUTOFF = 0.25; // seconds past hit time → auto miss
+const MISS_CUTOFF = 0.25;
 
 export function useGameEngine(songDuration: number, bpm: number) {
   const notes = useGameStore((s) => s.notes);
@@ -13,57 +13,71 @@ export function useGameEngine(songDuration: number, bpm: number) {
   const missNote = useGameStore((s) => s.missNote);
   const endGame = useGameStore((s) => s.endGame);
 
+  // Always-fresh refs so the rAF loop never has stale closures
   const notesRef = useRef<Note[]>(notes);
+  const screenRef = useRef(screen);
+  const endGameRef = useRef(endGame);
+  const missNoteRef = useRef(missNote);
+  const songDurationRef = useRef(songDuration);
   const rafRef = useRef<number>(0);
 
-  // Keep ref in sync without subscribing in rAF
   useEffect(() => {
     notesRef.current = notes;
   }, [notes]);
+  useEffect(() => {
+    screenRef.current = screen;
+  }, [screen]);
+  useEffect(() => {
+    endGameRef.current = endGame;
+  }, [endGame]);
+  useEffect(() => {
+    missNoteRef.current = missNote;
+  }, [missNote]);
+  useEffect(() => {
+    songDurationRef.current = songDuration;
+  }, [songDuration]);
 
-  // Auto-miss loop — checks every rAF if any notes slipped past
-  const runLoop = useCallback(() => {
-    if (screen !== "game") return;
+  // Stable rAF loop using refs — never recreated, never stale
+  const loopFnRef = useRef<() => void>();
+  loopFnRef.current = () => {
+    if (screenRef.current !== "game") return;
     const now = audioEngine.getSongTime();
 
-    // Auto-miss notes that passed without being hit
     for (const note of notesRef.current) {
       if (!note.hit && !note.missed && now > note.time + MISS_CUTOFF) {
-        missNote(note.id);
+        missNoteRef.current(note.id);
         audioEngine.playMiss();
       }
     }
 
-    // End game when song time exceeds duration
-    if (now >= songDuration) {
-      endGame();
+    if (now >= songDurationRef.current) {
+      endGameRef.current();
       return;
     }
 
-    rafRef.current = requestAnimationFrame(runLoop);
-  }, [screen, missNote, endGame, songDuration]);
+    rafRef.current = requestAnimationFrame(loopFnRef.current!);
+  };
 
   useEffect(() => {
     if (screen === "game") {
       audioEngine.start(bpm);
-      rafRef.current = requestAnimationFrame(runLoop);
+      rafRef.current = requestAnimationFrame(loopFnRef.current!);
     } else {
       audioEngine.stop();
       cancelAnimationFrame(rafRef.current);
     }
     return () => {
       cancelAnimationFrame(rafRef.current);
+      audioEngine.stop();
     };
-  }, [screen, runLoop, bpm]);
+  }, [screen, bpm]);
 
-  // Called by keyboard/touch input with the lane pressed
   const handleLanePress = useCallback(
     (lane: number) => {
-      if (screen !== "game") return;
+      if (screenRef.current !== "game") return;
       const now = audioEngine.getSongTime();
       const currentNotes = notesRef.current;
 
-      // Find closest unhit note in this lane
       let closest: Note | null = null;
       let minDist = Number.POSITIVE_INFINITY;
 
@@ -78,7 +92,6 @@ export function useGameEngine(songDuration: number, bpm: number) {
       }
 
       if (!closest) return;
-
       const diff = Math.abs(closest.time - now);
 
       if (diff <= HIT_WINDOWS.perfect) {
@@ -91,9 +104,8 @@ export function useGameEngine(songDuration: number, bpm: number) {
         hitNote(closest.id, "good", lane);
         audioEngine.playHit(lane, "good");
       }
-      // Outside good window = no hit registered (note will auto-miss later)
     },
-    [screen, hitNote],
+    [hitNote],
   );
 
   return { handleLanePress };
