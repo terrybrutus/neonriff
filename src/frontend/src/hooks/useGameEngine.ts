@@ -43,7 +43,7 @@ export function useGameEngine(
   }, [songDuration]);
 
   // Stable rAF loop using refs — never recreated, never stale
-  const loopFnRef = useRef<() => void>();
+  const loopFnRef = useRef<() => void>(function noop() {});
   loopFnRef.current = () => {
     if (screenRef.current !== "game") return;
     const now = audioEngine.getSongTime();
