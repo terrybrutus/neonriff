@@ -1,4 +1,5 @@
 import { audioEngine } from "@/lib/audioEngine";
+import type { SongStyle } from "@/lib/audioEngine";
 import { useGameStore } from "@/store/gameStore";
 import type { Lane, Note } from "@/types/game";
 import { HIT_WINDOWS } from "@/types/game";
@@ -6,7 +7,11 @@ import { useCallback, useEffect, useRef } from "react";
 
 const MISS_CUTOFF = 0.25;
 
-export function useGameEngine(songDuration: number, bpm: number) {
+export function useGameEngine(
+  songDuration: number,
+  bpm: number,
+  style: SongStyle,
+) {
   const notes = useGameStore((s) => s.notes);
   const screen = useGameStore((s) => s.screen);
   const hitNote = useGameStore((s) => s.hitNote);
@@ -60,7 +65,7 @@ export function useGameEngine(songDuration: number, bpm: number) {
 
   useEffect(() => {
     if (screen === "game") {
-      audioEngine.start(bpm);
+      audioEngine.start(bpm, style);
       rafRef.current = requestAnimationFrame(loopFnRef.current!);
     } else {
       audioEngine.stop();
@@ -70,7 +75,7 @@ export function useGameEngine(songDuration: number, bpm: number) {
       cancelAnimationFrame(rafRef.current);
       audioEngine.stop();
     };
-  }, [screen, bpm]);
+  }, [screen, bpm, style]);
 
   const handleLanePress = useCallback(
     (lane: number) => {

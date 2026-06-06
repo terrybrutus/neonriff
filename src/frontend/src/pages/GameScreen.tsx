@@ -16,7 +16,11 @@ export function GameScreen() {
   const song = getSong(selectedSongId);
   const chart = song.charts[difficulty];
 
-  const { handleLanePress } = useGameEngine(song.duration, song.bpm);
+  const { handleLanePress } = useGameEngine(
+    song.duration,
+    song.bpm,
+    song.style,
+  );
   useKeyboardInput(handleLanePress);
 
   // End game when health hits 0 — must be in effect, not render

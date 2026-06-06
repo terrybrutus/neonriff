@@ -2,6 +2,7 @@ export type Lane = 0 | 1 | 2 | 3 | 4;
 export type Difficulty = "easy" | "medium" | "hard" | "expert";
 export type HitRating = "perfect" | "great" | "good" | "miss";
 export type GameScreen = "start" | "game" | "gameover";
+export type SongStyle = "metal" | "blues-rock" | "electronic";
 
 export interface Note {
   id: string;
@@ -20,6 +21,7 @@ export interface Song {
   artist: string;
   bpm: number;
   duration: number; // seconds
+  style: SongStyle;
   charts: Record<Difficulty, Note[]>;
 }
 
