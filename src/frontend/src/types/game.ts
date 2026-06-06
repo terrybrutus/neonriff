@@ -1,60 +1,61 @@
+export type Lane = 0 | 1 | 2 | 3 | 4;
+export type Difficulty = "easy" | "medium" | "hard" | "expert";
+export type HitRating = "perfect" | "great" | "good" | "miss";
+export type GameScreen = "start" | "game" | "gameover";
+
 export interface Note {
   id: string;
-  lane: 0 | 1 | 2 | 3 | 4;
-  time: number;
-  duration?: number;
+  lane: Lane;
+  time: number; // seconds from song start when note should be hit
+  type: "tap" | "hold";
+  holdDuration?: number;
+  hit: boolean;
+  missed: boolean;
+  hitRating?: HitRating;
 }
 
-export type NoteResult = "Perfect" | "Great" | "Good" | "Miss";
-
-export type Difficulty = "Easy" | "Medium" | "Hard";
-
-export type GameState = "idle" | "playing" | "paused" | "gameover";
-
-export interface ParticleEmit {
+export interface Song {
   id: string;
-  lane: number;
-  type: "hit" | "miss" | "explosion";
-  createdAt: number;
+  title: string;
+  artist: string;
+  bpm: number;
+  duration: number; // seconds
+  charts: Record<Difficulty, Note[]>;
 }
 
-export interface ScreenShake {
-  active: boolean;
-  intensity: number;
-}
-
-export interface Accuracy {
-  perfect: number;
-  great: number;
-  good: number;
-  miss: number;
-  total: number;
-}
-
-export interface GameStore {
-  gameState: GameState;
-  difficulty: Difficulty;
-  notes: Note[];
+export interface HitEvent {
+  lane: Lane;
+  rating: HitRating;
   score: number;
-  combo: number;
-  maxCombo: number;
-  health: number;
-  accuracy: Accuracy;
-  laneActive: boolean[];
-  particles: ParticleEmit[];
-  screenShake: ScreenShake;
-  crowdEnergy: number;
-
-  startGame: (difficulty: Difficulty) => void;
-  endGame: () => void;
-  pauseGame: () => void;
-  resumeGame: () => void;
-  hitNote: (noteId: string, result: NoteResult) => void;
-  missNote: (noteId: string) => void;
-  pressLane: (lane: number) => void;
-  releaseLane: (lane: number) => void;
-  addParticle: (lane: number, type: ParticleEmit["type"]) => void;
-  clearParticle: (id: string) => void;
-  triggerScreenShake: (intensity: number) => void;
-  updateCrowdEnergy: (delta: number) => void;
+  time: number;
 }
+
+export const LANE_COLORS: Record<Lane, string> = {
+  0: "#00ff41",
+  1: "#ff1744",
+  2: "#ffea00",
+  3: "#00b0ff",
+  4: "#ff6d00",
+};
+
+export const LANE_KEYS: Record<Lane, string> = {
+  0: "A",
+  1: "S",
+  2: "D",
+  3: "F",
+  4: "Space",
+};
+
+export const HIT_WINDOWS: Record<HitRating, number> = {
+  perfect: 0.05,
+  great: 0.1,
+  good: 0.15,
+  miss: 0,
+};
+
+export const HIT_SCORES: Record<HitRating, number> = {
+  perfect: 150,
+  great: 100,
+  good: 50,
+  miss: 0,
+};

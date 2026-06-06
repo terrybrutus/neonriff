@@ -1,191 +1,227 @@
-import { EASY_CHART, HARD_CHART, MEDIUM_CHART } from "@/data/songChart";
+import { SONGS, getSong } from "@/data/songs";
 import type {
   Difficulty,
-  GameStore,
-  NoteResult,
-  ParticleEmit,
+  GameScreen,
+  HitRating,
+  Note,
+  Song,
 } from "@/types/game";
+import { HIT_SCORES } from "@/types/game";
 import { create } from "zustand";
+import { useShallow } from "zustand/react/shallow";
 
-const CHARTS: Record<Difficulty, typeof EASY_CHART> = {
-  Easy: EASY_CHART,
-  Medium: MEDIUM_CHART,
-  Hard: HARD_CHART,
-};
-
-const SCORE_MAP: Record<NoteResult, number> = {
-  Perfect: 300,
-  Great: 200,
-  Good: 100,
-  Miss: 0,
-};
-
-function getComboMultiplier(combo: number): number {
-  return Math.min(2.0, 1.0 + Math.floor(combo / 10) * 0.1);
+interface Accuracy {
+  perfect: number;
+  great: number;
+  good: number;
+  miss: number;
 }
 
-function clamp(val: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, val));
+interface HitEvent {
+  id: string;
+  lane: number;
+  rating: HitRating;
+  x: number;
+  y: number;
 }
 
-export const useGameStore = create<GameStore>((set, get) => ({
-  gameState: "idle",
-  difficulty: "Medium",
+interface GameState {
+  screen: GameScreen;
+  selectedSongId: string;
+  difficulty: Difficulty;
+
+  // Active game state
+  notes: Note[];
+  score: number;
+  combo: number;
+  maxCombo: number;
+  health: number; // 0-100
+  accuracy: Accuracy;
+  pressedLanes: boolean[];
+  hitEvents: HitEvent[];
+  lastRating: HitRating | null;
+
+  // High scores per song+difficulty
+  highScores: Record<string, number>;
+}
+
+interface GameActions {
+  selectSong: (songId: string) => void;
+  selectDifficulty: (d: Difficulty) => void;
+  startGame: () => void;
+  endGame: () => void;
+  returnToStart: () => void;
+
+  setNotes: (notes: Note[]) => void;
+  hitNote: (noteId: string, rating: HitRating, lane: number) => void;
+  missNote: (noteId: string) => void;
+  pressLane: (lane: number) => void;
+  releaseLane: (lane: number) => void;
+  clearHitEvent: (id: string) => void;
+}
+
+type Store = GameState & GameActions;
+
+const initialPressedLanes = [false, false, false, false, false];
+
+export const useGameStore = create<Store>((set, get) => ({
+  screen: "start",
+  selectedSongId: SONGS[0].id,
+  difficulty: "medium",
   notes: [],
   score: 0,
   combo: 0,
   maxCombo: 0,
-  health: 80,
-  accuracy: { perfect: 0, great: 0, good: 0, miss: 0, total: 0 },
-  laneActive: [false, false, false, false, false],
-  particles: [],
-  screenShake: { active: false, intensity: 0 },
-  crowdEnergy: 50,
+  health: 100,
+  accuracy: { perfect: 0, great: 0, good: 0, miss: 0 },
+  pressedLanes: [...initialPressedLanes],
+  hitEvents: [],
+  lastRating: null,
+  highScores: {},
 
-  startGame: (difficulty: Difficulty) => {
-    const chart = CHARTS[difficulty];
+  selectSong: (songId) => set({ selectedSongId: songId }),
+  selectDifficulty: (d) => set({ difficulty: d }),
+
+  startGame: () => {
+    const { selectedSongId, difficulty } = get();
+    const song = getSong(selectedSongId);
+    // Deep clone notes so the chart stays pristine
+    const notes: Note[] = song.charts[difficulty].map((n) => ({
+      ...n,
+      hit: false,
+      missed: false,
+    }));
     set({
-      gameState: "playing",
-      difficulty,
-      notes: chart.map((n) => ({ ...n })),
+      screen: "game",
+      notes,
       score: 0,
       combo: 0,
       maxCombo: 0,
-      health: 80,
-      accuracy: { perfect: 0, great: 0, good: 0, miss: 0, total: 0 },
-      laneActive: [false, false, false, false, false],
-      particles: [],
-      screenShake: { active: false, intensity: 0 },
-      crowdEnergy: 50,
+      health: 100,
+      accuracy: { perfect: 0, great: 0, good: 0, miss: 0 },
+      pressedLanes: [...initialPressedLanes],
+      hitEvents: [],
+      lastRating: null,
     });
   },
 
   endGame: () => {
-    set({ gameState: "gameover" });
-  },
-
-  pauseGame: () => {
-    const { gameState } = get();
-    if (gameState === "playing") set({ gameState: "paused" });
-  },
-
-  resumeGame: () => {
-    const { gameState } = get();
-    if (gameState === "paused") set({ gameState: "playing" });
-  },
-
-  hitNote: (noteId: string, result: NoteResult) => {
-    const state = get();
-    if (state.gameState !== "playing") return;
-
-    const points = SCORE_MAP[result];
-    const mult = getComboMultiplier(state.combo + 1);
-    const added = Math.round(points * mult);
-
-    const newCombo = result === "Miss" ? 0 : state.combo + 1;
-    const newMaxCombo = Math.max(state.maxCombo, newCombo);
-
-    const healthDelta = result === "Perfect" ? 2 : result === "Miss" ? -15 : 0;
-    const newHealth = clamp(state.health + healthDelta, 0, 100);
-
-    const crowdDelta =
-      result === "Perfect"
-        ? 3
-        : result === "Great"
-          ? 1
-          : result === "Miss"
-            ? -5
-            : 0;
-    const newCrowd = clamp(state.crowdEnergy + crowdDelta, 0, 100);
-
-    const newAccuracy = { ...state.accuracy };
-    newAccuracy.total += 1;
-    if (result === "Perfect") newAccuracy.perfect += 1;
-    else if (result === "Great") newAccuracy.great += 1;
-    else if (result === "Good") newAccuracy.good += 1;
-    else if (result === "Miss") newAccuracy.miss += 1;
-
-    const newNotes = state.notes.filter((n) => n.id !== noteId);
-
+    const { score, selectedSongId, difficulty, highScores, accuracy } = get();
+    const key = `${selectedSongId}:${difficulty}`;
+    const prev = highScores[key] ?? 0;
+    const totalHits = accuracy.perfect + accuracy.great + accuracy.good;
+    const total = totalHits + accuracy.miss;
+    void total; // used for future stats
     set({
-      notes: newNotes,
-      score: state.score + added,
-      combo: newCombo,
-      maxCombo: newMaxCombo,
-      health: newHealth,
-      accuracy: newAccuracy,
-      crowdEnergy: newCrowd,
+      screen: "gameover",
+      highScores: score > prev ? { ...highScores, [key]: score } : highScores,
     });
-
-    if (newHealth <= 0) {
-      get().endGame();
-    }
   },
 
-  missNote: (noteId: string) => {
-    const state = get();
-    if (state.gameState !== "playing") return;
+  returnToStart: () => set({ screen: "start" }),
 
-    const newHealth = clamp(state.health - 15, 0, 100);
-    const newCrowd = clamp(state.crowdEnergy - 5, 0, 100);
-    const newAccuracy = { ...state.accuracy };
-    newAccuracy.total += 1;
-    newAccuracy.miss += 1;
+  setNotes: (notes) => set({ notes }),
 
-    const newNotes = state.notes.filter((n) => n.id !== noteId);
+  hitNote: (noteId, rating, lane) =>
+    set((s) => {
+      const pts = HIT_SCORES[rating];
+      const newCombo = rating === "miss" ? 0 : s.combo + 1;
+      const multiplier =
+        newCombo >= 30 ? 4 : newCombo >= 20 ? 3 : newCombo >= 10 ? 2 : 1;
+      const earned = pts * multiplier;
+      const healthDelta =
+        rating === "perfect"
+          ? 2
+          : rating === "great"
+            ? 1
+            : rating === "good"
+              ? 0
+              : -15;
+      const newHealth = Math.min(100, Math.max(0, s.health + healthDelta));
+      const newMaxCombo = Math.max(s.maxCombo, newCombo);
+      const newAcc = { ...s.accuracy, [rating]: s.accuracy[rating] + 1 };
+      const updatedNotes = s.notes.map((n) =>
+        n.id === noteId ? { ...n, hit: true, hitRating: rating } : n,
+      );
+      const hitEvent: HitEvent = {
+        id: `${noteId}-ev`,
+        lane,
+        rating,
+        x: 0,
+        y: 0,
+      };
+      return {
+        notes: updatedNotes,
+        score: s.score + earned,
+        combo: newCombo,
+        maxCombo: newMaxCombo,
+        health: newHealth,
+        accuracy: newAcc,
+        lastRating: rating,
+        hitEvents: [...s.hitEvents, hitEvent].slice(-10),
+      };
+    }),
 
-    set({
-      notes: newNotes,
+  missNote: (noteId) =>
+    set((s) => ({
+      notes: s.notes.map((n) => (n.id === noteId ? { ...n, missed: true } : n)),
       combo: 0,
-      health: newHealth,
-      accuracy: newAccuracy,
-      crowdEnergy: newCrowd,
-    });
+      health: Math.max(0, s.health - 15),
+      accuracy: { ...s.accuracy, miss: s.accuracy.miss + 1 },
+      lastRating: "miss",
+    })),
 
-    if (newHealth <= 0) {
-      get().endGame();
-    }
-  },
+  pressLane: (lane) =>
+    set((s) => {
+      const next = [...s.pressedLanes];
+      next[lane] = true;
+      return { pressedLanes: next };
+    }),
 
-  pressLane: (lane: number) => {
-    const state = get();
-    const next = [...state.laneActive];
-    if (lane >= 0 && lane < 5) next[lane] = true;
-    set({ laneActive: next });
-  },
+  releaseLane: (lane) =>
+    set((s) => {
+      const next = [...s.pressedLanes];
+      next[lane] = false;
+      return { pressedLanes: next };
+    }),
 
-  releaseLane: (lane: number) => {
-    const state = get();
-    const next = [...state.laneActive];
-    if (lane >= 0 && lane < 5) next[lane] = false;
-    set({ laneActive: next });
-  },
-
-  addParticle: (lane: number, type: ParticleEmit["type"]) => {
-    const state = get();
-    const particle: ParticleEmit = {
-      id: `p-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      lane,
-      type,
-      createdAt: Date.now(),
-    };
-    set({ particles: [...state.particles, particle] });
-  },
-
-  clearParticle: (id: string) => {
-    const state = get();
-    set({ particles: state.particles.filter((p) => p.id !== id) });
-  },
-
-  triggerScreenShake: (intensity: number) => {
-    set({ screenShake: { active: true, intensity } });
-    setTimeout(() => {
-      set({ screenShake: { active: false, intensity: 0 } });
-    }, 300);
-  },
-
-  updateCrowdEnergy: (delta: number) => {
-    const state = get();
-    set({ crowdEnergy: clamp(state.crowdEnergy + delta, 0, 100) });
-  },
+  clearHitEvent: (id) =>
+    set((s) => ({ hitEvents: s.hitEvents.filter((e) => e.id !== id) })),
 }));
+
+// Shallow selectors for object slices
+export function useGameStatus() {
+  return useGameStore(
+    useShallow((s) => ({
+      screen: s.screen,
+      score: s.score,
+      combo: s.combo,
+      maxCombo: s.maxCombo,
+      health: s.health,
+      accuracy: s.accuracy,
+      lastRating: s.lastRating,
+    })),
+  );
+}
+
+export function useGameActions() {
+  return useGameStore(
+    useShallow((s) => ({
+      selectSong: s.selectSong,
+      selectDifficulty: s.selectDifficulty,
+      startGame: s.startGame,
+      endGame: s.endGame,
+      returnToStart: s.returnToStart,
+      hitNote: s.hitNote,
+      missNote: s.missNote,
+      pressLane: s.pressLane,
+      releaseLane: s.releaseLane,
+      clearHitEvent: s.clearHitEvent,
+    })),
+  );
+}
+
+export function getSongForGame(): Song {
+  const { selectedSongId } = useGameStore.getState();
+  return getSong(selectedSongId);
+}

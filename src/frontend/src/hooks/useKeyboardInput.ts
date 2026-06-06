@@ -1,55 +1,44 @@
 import { useGameStore } from "@/store/gameStore";
 import { useEffect, useRef } from "react";
 
-const LANE_KEYS: Record<string, number> = {
+const KEY_TO_LANE: Record<string, number> = {
   a: 0,
-  A: 0,
   s: 1,
-  S: 1,
   d: 2,
-  D: 2,
   f: 3,
-  F: 3,
   " ": 4,
 };
 
-export function useKeyboardInput(
-  onLanePress: (lane: number, time: number) => void,
-) {
-  const heldRef = useRef<Set<string>>(new Set());
+export function useKeyboardInput(onLanePress: (lane: number) => void) {
   const pressLane = useGameStore((s) => s.pressLane);
   const releaseLane = useGameStore((s) => s.releaseLane);
+  const heldKeys = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const key = e.key;
-      if (heldRef.current.has(key)) return; // debounce repeat
-      const lane = LANE_KEYS[key];
+      const key = e.key.toLowerCase();
+      if (key === " ") e.preventDefault();
+      const lane = KEY_TO_LANE[key];
       if (lane === undefined) return;
-
-      e.preventDefault();
-      heldRef.current.add(key);
+      if (heldKeys.current.has(key)) return; // ignore key repeat
+      heldKeys.current.add(key);
       pressLane(lane);
-      onLanePress(lane, performance.now());
+      onLanePress(lane);
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      const key = e.key;
-      const lane = LANE_KEYS[key];
+      const key = e.key.toLowerCase();
+      const lane = KEY_TO_LANE[key];
       if (lane === undefined) return;
-
-      e.preventDefault();
-      heldRef.current.delete(key);
+      heldKeys.current.delete(key);
       releaseLane(lane);
     };
 
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
-
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
-      heldRef.current.clear();
     };
-  }, [onLanePress, pressLane, releaseLane]);
+  }, [pressLane, releaseLane, onLanePress]);
 }
