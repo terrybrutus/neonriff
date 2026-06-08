@@ -658,7 +658,8 @@ function Particles() {
         blending: THREE.AdditiveBlending,
       });
 
-      const pts = new THREE.Points(geo, mat) as unknown as THREE.Points & PtsMeta;
+      const pts = new THREE.Points(geo, mat) as unknown as THREE.Points &
+        PtsMeta;
       pts.vels = vels;
       pts.birth = performance.now() / 1000;
       pts.evId = ev.id;
